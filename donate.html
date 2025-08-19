@@ -72,6 +72,8 @@
         .loading { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
         .spinner { width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .char-limit { font-size: 12px; color: #666; text-align: right; margin-top: 4px; }
+        .char-limit.warning { color: var(--error); }
     </style>
 </head>
 <body>
@@ -82,8 +84,9 @@
         <form id="donation-form" class="donation-form">
             <div class="form-group">
                 <label for="name">Your Name</label>
-                <input type="text" id="name" required>
-                <div id="name-error" class="error-message" style="color:red;display:none;">Please enter your name</div>
+                <input type="text" id="name" maxlength="12" required>
+                <div class="char-limit" id="name-char-limit">0/12 characters</div>
+                <div id="name-error" class="error-message" style="color:red;display:none;">Please enter your name (max 12 characters)</div>
             </div>
             <div class="form-group">
                 <label for="email">Email (Optional)</label>
@@ -105,7 +108,8 @@
             </div>
             <div class="form-group">
                 <label for="message">Special Instructions (Optional)</label>
-                <textarea id="message"></textarea>
+                <textarea id="message" maxlength="230"></textarea>
+                <div class="char-limit" id="message-char-limit">0/230 characters</div>
             </div>
             <div class="payment-methods">
                 <p>Choose payment method:</p>
@@ -120,20 +124,21 @@
         <div class="qr-section">
             <h3>Or scan this QR code:</h3>
             <img src="upi-qr.png" alt="UPI QR Code">
-            <p>UPI ID: <strong>realrisit@axl</strong></p>
+            <p>UPI ID: <strong>acquiredom@okhdfcbank</strong></p>
         </div>
 
         <div class="confirmation" id="confirmation">
             <h2>Thank You! ❤️</h2>
             <p>Your donation details have been recorded.</p>
             <p>Transaction reference: <span id="txn-ref"></span></p>
+            <p>Please complete the payment in your UPI app.</p>
         </div>
     </div>
 
     <div class="loading" id="loading"><div class="spinner"></div></div>
 
     <script>
-        const upiId = "realrisit@axl";
+        const upiId = "acquiredom@okhdfcbank";
         const recipientName = "Stray Cat Rescue";
         const googleScriptUrl = "https://script.google.com/macros/s/AKfycbxQedlBJ7--G_9QNr4ZUz0u-NSfTl1yCsFsP4kLHG-UV-q8gXEZSnICwRyaMz9yT8zs/exec";
         let selectedAmount = 0;
@@ -143,9 +148,33 @@
         const nameInput = document.getElementById('name');
         const emailInput = document.getElementById('email');
         const customInput = document.getElementById('custom-input');
+        const messageInput = document.getElementById('message');
         const nameError = document.getElementById('name-error');
         const emailError = document.getElementById('email-error');
         const amountError = document.getElementById('amount-error');
+        const nameCharLimit = document.getElementById('name-char-limit');
+        const messageCharLimit = document.getElementById('message-char-limit');
+
+        // Character limit counters
+        nameInput.addEventListener('input', () => {
+            const length = nameInput.value.length;
+            nameCharLimit.textContent = `${length}/12 characters`;
+            if (length >= 10) {
+                nameCharLimit.classList.add('warning');
+            } else {
+                nameCharLimit.classList.remove('warning');
+            }
+        });
+
+        messageInput.addEventListener('input', () => {
+            const length = messageInput.value.length;
+            messageCharLimit.textContent = `${length}/230 characters`;
+            if (length >= 200) {
+                messageCharLimit.classList.add('warning');
+            } else {
+                messageCharLimit.classList.remove('warning');
+            }
+        });
 
         document.querySelectorAll('.amount-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -171,9 +200,28 @@
 
         function validateForm() {
             let isValid = true;
-            if (!nameInput.value.trim()) { nameError.style.display = 'block'; isValid = false; } else { nameError.style.display = 'none'; }
-            if (emailInput.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) { emailError.style.display = 'block'; isValid = false; } else { emailError.style.display = 'none'; }
-            if (selectedAmount <= 0) { amountError.style.display = 'block'; amountError.textContent = "Please select an amount"; isValid = false; } else { amountError.style.display = 'none'; }
+            if (!nameInput.value.trim() || nameInput.value.trim().length > 12) { 
+                nameError.style.display = 'block'; 
+                isValid = false; 
+            } else { 
+                nameError.style.display = 'none'; 
+            }
+            
+            if (emailInput.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value)) { 
+                emailError.style.display = 'block'; 
+                isValid = false; 
+            } else { 
+                emailError.style.display = 'none'; 
+            }
+            
+            if (selectedAmount <= 0) { 
+                amountError.style.display = 'block'; 
+                amountError.textContent = "Please select an amount"; 
+                isValid = false; 
+            } else { 
+                amountError.style.display = 'none'; 
+            }
+            
             return isValid;
         }
 
@@ -181,10 +229,13 @@
             btn.addEventListener('click', async () => {
                 if (!validateForm()) return;
 
-                const donorName = nameInput.value.trim();
+                const donorName = nameInput.value.trim().substring(0, 12);
                 const donorEmail = emailInput.value.trim();
-                const message = document.getElementById('message').value.trim();
+                const message = document.getElementById('message').value.trim().substring(0, 230);
                 const txnRef = 'TXN-' + Date.now().toString().slice(-6);
+                
+                // Format the transaction note as requested: CAT|"name"|"detail"
+                const transactionNote = `CAT|"${donorName}"|"${message || 'Donation for stray cats'}"`;
 
                 loadingDiv.style.display = 'flex';
                 try {
@@ -213,18 +264,18 @@
                     alert("⚠️ Error saving record, but payment will still continue.");
                 } finally {
                     loadingDiv.style.display = 'none';
-                    // open payment app
+                    // open payment app with formatted transaction note
                     const app = btn.dataset.app;
                     let paymentUrl = "";
                     switch(app) {
                         case "phonepe":
-                            paymentUrl = `phonepe://pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=Donation for ${encodeURIComponent(donorName)}`;
+                            paymentUrl = `phonepe://pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=${encodeURIComponent(transactionNote)}`;
                             break;
                         case "gpay":
-                            paymentUrl = `tez://upi/pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=Donation for ${encodeURIComponent(donorName)}`;
+                            paymentUrl = `tez://upi/pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=${encodeURIComponent(transactionNote)}`;
                             break;
                         default:
-                            paymentUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=Donation for ${encodeURIComponent(donorName)}`;
+                            paymentUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(recipientName)}&am=${selectedAmount}&cu=INR&tn=${encodeURIComponent(transactionNote)}`;
                     }
                     window.location.href = paymentUrl;
                 }
@@ -233,4 +284,3 @@
     </script>
 </body>
 </html>
-
